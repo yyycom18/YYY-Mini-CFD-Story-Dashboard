@@ -33,6 +33,106 @@ def _create_fake_data(symbol: str, rows: int = 50) -> pd.DataFrame:
     return df
 
 
+def fetch_1h_data(symbol: str, period_days: int = 5, timeout: int = 10, max_retry: int = 2) -> Optional[pd.DataFrame]:
+    """
+    Fetch 1-hour OHLC data using yfinance.
+    - symbol: one of keys in SYMBOL_MAP (e.g., "EURUSD","GBPJPY","SP500")
+    - timeout: per-call timeout (<=10)
+    - max_retry: <=2
+
+    Returns a DataFrame with lowercase columns ['open','high','low','close'] or None on failure.
+    """
+    print(f"[FETCH 1H START] {symbol}, period={period_days}d, timeout={timeout}s, max_retry={max_retry}")
+    
+    if symbol is None:
+        print(f"[FAIL 1H] {symbol} - symbol is None")
+        return None
+
+    mapped = SYMBOL_MAP.get(symbol)
+    if mapped is None:
+        print(f"[FAIL 1H] {symbol} - no mapping in SYMBOL_MAP")
+        return None
+    
+    print(f"[MAPPED 1H] {symbol} → {mapped}")
+
+    candidates = [mapped]
+    if symbol == "SP500":
+        if mapped != "SPY":
+            candidates = [mapped, "SPY"]
+    
+    print(f"[CANDIDATES 1H] {symbol}: {candidates}")
+
+    period_arg = f"{max(1, min(period_days, 60))}d"
+    print(f"[PERIOD 1H] {symbol}: {period_arg}")
+
+    attempts = 0
+    for cand in candidates:
+        if attempts >= max_retry:
+            print(f"[RETRY_LIMIT 1H] {symbol} ({cand}) - max retries reached")
+            break
+        attempts += 1
+        
+        print(f"[FETCH ATTEMPT 1H {attempts}] {symbol} → {cand}, interval=1h, period={period_arg}, timeout={timeout}s")
+        
+        try:
+            df = yf.download(
+                cand,
+                interval="1h",
+                period=period_arg,
+                auto_adjust=False,
+                progress=False,
+                timeout=timeout
+            )
+            print(f"[RAW_DF 1H] {symbol} ({cand}): df type={type(df)}, rows={len(df) if df is not None else 'None'}")
+        except Exception as e:
+            print(f"[FAIL 1H] {symbol} ({cand}) - yfinance exception: {type(e).__name__}: {e}")
+            df = None
+
+        # Validation checks
+        if df is None:
+            print(f"[FAIL 1H] {symbol} ({cand}) - df is None")
+            continue
+        if df.empty:
+            print(f"[FAIL 1H] {symbol} ({cand}) - df.empty=True")
+            continue
+        if len(df) < 10:
+            print(f"[FAIL 1H] {symbol} ({cand}) - insufficient rows: {len(df)} < 10")
+            continue
+
+        print(f"[PRE_NORMALIZE 1H] {symbol} ({cand}): columns={list(df.columns)}, rows={len(df)}")
+
+        # Normalize and ensure OHLC exist
+        try:
+            df = df.copy()
+            df.columns = [str(c).strip().lower() for c in df.columns]
+            print(f"[NORMALIZED_COLS 1H] {symbol} ({cand}): {list(df.columns)}")
+            
+            expected = ["open", "high", "low", "close"]
+            missing = [c for c in expected if c not in df.columns]
+            if missing:
+                print(f"[FAIL 1H] {symbol} ({cand}) - missing columns: {missing}")
+                continue
+            
+            df = df[expected].dropna()
+            print(f"[POST_DROPNA 1H] {symbol} ({cand}): rows={len(df)}")
+            
+            if df.empty or len(df) < 10:
+                print(f"[FAIL 1H] {symbol} ({cand}) - post-clean insufficient rows: {len(df)} < 10")
+                continue
+                
+        except Exception as e:
+            print(f"[FAIL 1H] {symbol} ({cand}) - validation error: {type(e).__name__}: {e}")
+            continue
+
+        print(f"[SUCCESS 1H] {symbol} ({cand}) - {len(df)} rows fetched")
+        return df
+
+    # all attempts failed for 1H
+    print(f"[FAIL 1H] {symbol} - all {len(candidates)} candidate(s) tried")
+    print(f"[FALLBACK 1H] {symbol} - returning None (will use 30M as fallback in logic)")
+    return None
+
+
 def fetch_30m_data(symbol: str, period_days: int = 7, timeout: int = 10, max_retry: int = 2) -> Optional[pd.DataFrame]:
     """
     Fetch 30-minute OHLC data using yfinance.
@@ -126,17 +226,13 @@ def fetch_30m_data(symbol: str, period_days: int = 7, timeout: int = 10, max_ret
             print(f"[FAIL] {symbol} ({cand}) - validation error: {type(e).__name__}: {e}")
             continue
 
-        print(f"[SUCCESS] {symbol} ({cand}) - {len(df)} rows fetched")
+        print(f"[SUCCESS REAL] {symbol} ({cand}) - {len(df)} rows fetched")
         return df
 
     # all attempts failed
     print(f"[FAIL] {symbol} - all {len(candidates)} candidate(s) tried")
-    
-    # FALLBACK: If all yfinance calls failed and DEBUG_MODE_FALLBACK is True
-    if DEBUG_MODE_FALLBACK:
-        print(f"[DEBUG_FALLBACK] {symbol} - creating fake data for testing UI/logic")
-        return _create_fake_data(symbol, rows=50)
-    
-    return None
+    # FALLBACK: synthetic
+    print(f"[FALLBACK USED] {symbol} - returning synthetic data")
+    return _create_fake_data(symbol, rows=50)
  
 
