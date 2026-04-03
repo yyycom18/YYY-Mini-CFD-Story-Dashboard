@@ -1,6 +1,6 @@
 import pandas as pd
 from typing import Tuple, Optional
-from market_structure import detect_market_structure
+from logic.market_structure import detect_market_structure
 from logic.momentum import detect_momentum
 
 
