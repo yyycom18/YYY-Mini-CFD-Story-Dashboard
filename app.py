@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+from pathlib import Path
 from data.fetch import fetch_30m_data, fetch_1h_data
 from logic.analysis import (
     compute_season_4h,
@@ -9,8 +10,46 @@ from logic.analysis import (
     compute_proximity,
     priority_from_alignment_proximity,
 )
-from ui.render import render_asset_row
+from ui.render import render_asset_row, render_scanner_header
 from typing import List, Tuple, Optional
+
+_PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+def _read_doc(relative_path: str) -> Optional[str]:
+    path = _PROJECT_ROOT / relative_path
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _render_documentation_ui() -> None:
+    """Sidebar quick reference + main expander (full doc). Lazy: read files once per run."""
+    doc_main = _read_doc("docs/50_TRADING_LOGIC.md")
+    doc_quick = _read_doc("docs/51_TRADING_LOGIC_QUICK_REFERENCE.md")
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📖 Dashboard Guide")
+    if doc_main:
+        with st.sidebar.expander("Trading logic (50_TRADING_LOGIC.md)", expanded=False):
+            st.markdown(doc_main)
+    else:
+        st.sidebar.warning("Documentation not available (50_TRADING_LOGIC.md).")
+
+    st.sidebar.subheader("Quick Guide")
+    if doc_quick:
+        with st.sidebar.expander("Quick reference (51_…)", expanded=False):
+            st.markdown(doc_quick)
+    else:
+        st.sidebar.warning("Quick reference not available (51_TRADING_LOGIC_QUICK_REFERENCE.md).")
+
+    st.markdown("---")
+    with st.expander("📖 How this dashboard works (full)", expanded=False):
+        if doc_main:
+            st.markdown(doc_main)
+        else:
+            st.warning("Documentation not available.")
 
 MAX_ASSETS = 3
 DEFAULT_ASSETS = ["EURUSD", "GBPJPY", "SP500"]
@@ -31,6 +70,8 @@ def main():
     st.sidebar.header("Settings")
     st.sidebar.write(f"Max assets: {MAX_ASSETS}")
     st.sidebar.write("Data: 30M (4H proxy) + 1H (real)")
+
+    _render_documentation_ui()
 
     def safe_fetch_30m(symbol: str) -> Optional[pd.DataFrame]:
         """Fetch 30M data with timeout."""
@@ -110,9 +151,12 @@ def main():
         rows.append((sym, row))
 
     st.subheader("Market Scanner — Multi-Timeframe Radar")
-    st.write("Columns: Asset | Season (4H) | Wind (1H) | Bias (4H) | Bias (1H) | Alignment | Proximity | Priority")
-    st.write("**Data sources**: 30M (Season/Bias4) + 1H (Bias1 — real when available)")
+    st.caption(
+        "Data sources: 30M (Season / Bias 4H) + 1H (Bias 1H — real when available). "
+        "Header and rows use the same column layout for alignment."
+    )
 
+    render_scanner_header()
     for sym, row in rows:
         render_asset_row(sym, row)
         # small guard to keep UI responsive
