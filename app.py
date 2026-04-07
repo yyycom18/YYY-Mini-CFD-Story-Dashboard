@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import time
 from pathlib import Path
-from data.fetch import fetch_30m_data, fetch_1h_data
+from data.fetch import fetch_30m_data, fetch_1h_data, SYMBOL_MAP
+from data.asset_groups import build_scanner_assets
 from logic.analysis import (
     compute_season_4h,
     compute_bias,
@@ -10,6 +11,8 @@ from logic.analysis import (
     compute_proximity,
     priority_from_alignment_proximity,
 )
+from logic.market_structure import detect_market_structure
+from logic.trade_gate import trade_gate_mini
 from ui.render import render_asset_row, render_scanner_header
 from typing import List, Tuple, Optional
 
@@ -51,8 +54,6 @@ def _render_documentation_ui() -> None:
         else:
             st.warning("Documentation not available.")
 
-MAX_ASSETS = 3
-DEFAULT_ASSETS = ["EURUSD", "GBPJPY", "SP500"]
 GLOBAL_TIMEOUT = 15  # seconds
 
 st.set_page_config(page_title="Mini CFD Story Dashboard", layout="wide")
@@ -62,13 +63,25 @@ def main():
     start_time = time.time()
 
     st.title("Mini CFD Story Dashboard (v2 — Multi-Timeframe)")
-    st.write("Lightweight market radar — stable, fast, and simple. Now with real 1H data.")
-
-    # selected assets (limit)
-    assets = DEFAULT_ASSETS[:MAX_ASSETS]
+    st.write("Lightweight market radar — stable, fast, and simple. Trade Gate validation: Group A by default.")
 
     st.sidebar.header("Settings")
-    st.sidebar.write(f"Max assets: {MAX_ASSETS}")
+    include_group_b = st.sidebar.checkbox(
+        "Include Group B (secondary / risk)",
+        value=False,
+        help="Optional extra symbols (e.g. XAUUSD). Default = Group A only.",
+    )
+    active_universe = build_scanner_assets(SYMBOL_MAP, include_group_b)
+    n_univ = max(1, len(active_universe))
+    default_scan = min(4, n_univ)
+    max_assets = st.sidebar.slider(
+        "Max assets to scan",
+        min_value=1,
+        max_value=n_univ,
+        value=default_scan,
+    )
+    assets = active_universe[:max_assets]
+
     st.sidebar.write("Data: 30M (4H proxy) + 1H (real)")
 
     _render_documentation_ui()
@@ -108,6 +121,7 @@ def main():
         if df_30m is None and df_1h is None:
             print(f"[ERROR] {sym} - both timeframes failed")
             row = {
+                "trade_gate": "—",
                 "season": "N/A",
                 "wind": "N/A",
                 "bias4": "N/A",
@@ -137,8 +151,13 @@ def main():
             alignment = compute_alignment(df_for_metrics) if df_for_metrics is not None else 0
             proximity = compute_proximity(df_for_metrics) if df_for_metrics is not None else "⚪ FAR"
             priority = priority_from_alignment_proximity(alignment, proximity)
+
+            s4 = detect_market_structure(df_30m) if df_30m is not None else None
+            s1 = detect_market_structure(df_1h) if df_1h is not None else None
+            trade_gate = trade_gate_mini(s4, s1, alignment)
             
             row = {
+                "trade_gate": trade_gate,
                 "season": season_4h,
                 "wind": bias_1h,
                 "bias4": bias_4h,
@@ -153,7 +172,7 @@ def main():
     st.subheader("Market Scanner — Multi-Timeframe Radar")
     st.caption(
         "Data sources: 30M (Season / Bias 4H) + 1H (Bias 1H — real when available). "
-        "Header and rows use the same column layout for alignment."
+        "Trade Gate uses structure stages on 30M (season) and 1H (wind); see docs/60_TRADE_GATE_VALIDATION_PLAN.md."
     )
 
     render_scanner_header()

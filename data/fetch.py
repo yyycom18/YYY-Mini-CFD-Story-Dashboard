@@ -3,11 +3,22 @@ import pandas as pd
 import numpy as np
 from typing import Optional
 
-# SYMBOL_MAP: input symbol -> yfinance symbol
+# SYMBOL_MAP: input symbol -> yfinance symbol (aligned with Project 99 / 60_TRADE_GATE_VALIDATION_PLAN)
 SYMBOL_MAP = {
     "EURUSD": "EURUSD=X",
     "GBPJPY": "GBPJPY=X",
-    "SP500": "^GSPC",
+    "SPX500": "^GSPC",
+    "BTCUSD": "BTC-USD",
+    "XAUUSD": "GC=F",
+    "EURJPY": "EURJPY=X",
+    "EURGBP": "EURGBP=X",
+    "AUDUSD": "AUDUSD=X",
+    "GBPUSD": "GBPUSD=X",
+    "USDCAD": "USDCAD=X",
+    "NZDUSD": "NZDUSD=X",
+    "USDCHF": "USDCHF=X",
+    "USDJPY": "USDJPY=X",
+    "HK50": "^HSI",
 }
 
 # DEBUG MODE: If True, use fake data on yfinance failure
@@ -36,7 +47,7 @@ def _create_fake_data(symbol: str, rows: int = 50) -> pd.DataFrame:
 def fetch_1h_data(symbol: str, period_days: int = 5, timeout: int = 10, max_retry: int = 2) -> Optional[pd.DataFrame]:
     """
     Fetch 1-hour OHLC data using yfinance.
-    - symbol: one of keys in SYMBOL_MAP (e.g., "EURUSD","GBPJPY","SP500")
+    - symbol: one of keys in SYMBOL_MAP (e.g., "EURUSD","GBPJPY","SPX500")
     - timeout: per-call timeout (<=10)
     - max_retry: <=2
 
@@ -56,7 +67,7 @@ def fetch_1h_data(symbol: str, period_days: int = 5, timeout: int = 10, max_retr
     print(f"[MAPPED 1H] {symbol} → {mapped}")
 
     candidates = [mapped]
-    if symbol == "SP500":
+    if symbol == "SPX500":
         if mapped != "SPY":
             candidates = [mapped, "SPY"]
     
@@ -136,7 +147,7 @@ def fetch_1h_data(symbol: str, period_days: int = 5, timeout: int = 10, max_retr
 def fetch_30m_data(symbol: str, period_days: int = 7, timeout: int = 10, max_retry: int = 2) -> Optional[pd.DataFrame]:
     """
     Fetch 30-minute OHLC data using yfinance.
-    - symbol: one of keys in SYMBOL_MAP (e.g., "EURUSD","GBPJPY","SP500")
+    - symbol: one of keys in SYMBOL_MAP (e.g., "EURUSD","GBPJPY","SPX500")
     - timeout: per-call timeout (<=10)
     - max_retry: <=2
 
@@ -155,9 +166,9 @@ def fetch_30m_data(symbol: str, period_days: int = 7, timeout: int = 10, max_ret
     
     print(f"[MAPPED] {symbol} → {mapped}")
 
-    # For SP500 allow a single fallback to SPY
+    # For SPX500 allow a single fallback to SPY
     candidates = [mapped]
-    if symbol == "SP500":
+    if symbol == "SPX500":
         # primary ^GSPC then fallback SPY (ETF)
         if mapped != "SPY":
             candidates = [mapped, "SPY"]

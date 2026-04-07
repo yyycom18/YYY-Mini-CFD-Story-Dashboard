@@ -4,49 +4,6 @@ from typing import Optional
 
 def detect_market_structure(df: pd.DataFrame) -> Optional[int]:
     """
-    Lightweight market structure detector.
-    Returns:
-      1  -> Upside structure (HH + HL)
-     -1  -> Downside structure (LH + LL)
-      0  -> Neutral / Range
-     None -> invalid input
-
-    Uses a small lookback (last 6 bars) to determine higher-highs/lower-lows.
-    Pure, fast, no indicators.
-    """
-    if df is None:
-        return None
-    cols = {c.lower() for c in df.columns}
-    if not {"high", "low"}.issubset(cols):
-        return None
-    try:
-        d = df.copy()
-        d.columns = [c.lower() for c in d.columns]
-        highs = d["high"].astype(float).dropna()
-        lows = d["low"].astype(float).dropna()
-        if len(highs) < 4 or len(lows) < 4:
-            return None
-        recent_h = highs.tail(4).values
-        recent_l = lows.tail(4).values
-        # simple checks: higher highs and higher lows
-        hh = recent_h[-1] > recent_h[0]
-        hl = recent_l[-1] > recent_l[0]
-        lh = recent_h[-1] < recent_h[0]
-        ll = recent_l[-1] < recent_l[0]
-        if hh and hl:
-            return 1
-        if lh and ll:
-            return -1
-        return 0
-    except Exception:
-        return None
-
-import pandas as pd
-from typing import Optional
-
-
-def detect_market_structure(df: pd.DataFrame) -> Optional[int]:
-    """
     Detect 4H market structure using swing analysis (HH/HL/LH/LL).
     
     Returns:
